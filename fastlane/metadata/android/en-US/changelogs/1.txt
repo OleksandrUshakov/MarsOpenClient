@@ -1,0 +1,8 @@
+Initial release covering 100% of Marstek Device Open API (Rev 3.1) over LAN UDP:
+- Marstek.GetDevice (UDP Broadcast discovery & targeted lookup)
+- Wifi.GetStatus & BLE.GetStatus
+- Bat.GetStatus & PV.GetStatus (single & 4-channel MPPT)
+- ES.GetStatus, ES.GetMode & ES.SetMode (Auto, AI, Manual, Passive, UPS)
+- EM.GetStatus (CT & 3-phase energy meter)
+- SYS commands: DOD.SET, Ble.Adv, Led.Ctrl, Set.Ver, Reset.Factory
+- Built-in device simulator & Raw JSON-RPC UDP console

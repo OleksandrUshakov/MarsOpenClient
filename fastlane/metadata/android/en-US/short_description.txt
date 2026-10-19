@@ -1,0 +1,1 @@
+Open-source LAN UDP client for Marstek energy storage systems (Open API Rev 3.1)

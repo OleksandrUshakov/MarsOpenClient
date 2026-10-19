@@ -1,0 +1,10 @@
+MarsOpenClient is a free and open-source Android client for managing and monitoring Marstek energy storage systems (Venus A, Venus C, Venus D, Venus E, and Venus E mini) over a Local Area Network (LAN) via UDP without any cloud dependency.
+
+Features (100% coverage of Marstek Device Open API Rev 3.1):
+* LAN Discovery & Device Info (`Marstek.GetDevice`): UDP broadcast discovery and static IP connection on default port 30000 or custom ports (49152-65535).
+* Network & Connectivity (`Wifi.GetStatus`, `BLE.GetStatus`): View SSID, RSSI signal strength, IP, gateway, subnet mask, DNS, and Bluetooth connection status.
+* Battery & Photovoltaic Monitoring (`Bat.GetStatus`, `PV.GetStatus`): Monitor SOC, battery temperature, remaining/rated Wh capacity, charge/discharge flags, and 1-4 MPPT solar channels (Venus A/D).
+* Energy System & CT Meter (`ES.GetStatus`, `EM.GetStatus`): Real-time solar, battery, on-grid, and off-grid power flows, 3-phase CT power (Phase A/B/C), and cumulative energy counters.
+* Operating Mode Control (`ES.GetMode`, `ES.SetMode`): Switch between Auto, AI, Manual (with 0-9 / 0-5 time slots, 7-day `week_set` bitmask builder, and `manual_set` direction), Passive (power + countdown timer), and UPS modes.
+* System Control (`DOD.SET`, `Ble.Adv`, `Led.Ctrl`, `Set.Ver`, `Reset.Factory`): Configure Depth of Discharge (30-88%), Bluetooth broadcasting lock, panel LEDs, power version (800W-2500W), and factory reset (clear or keep accumulated statistics).
+* Built-in Demo Simulator & Raw UDP Console: Inspect sent/received JSON-RPC packets and test all device profiles offline.

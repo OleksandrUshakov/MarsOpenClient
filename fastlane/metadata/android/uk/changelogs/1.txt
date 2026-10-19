@@ -1,0 +1,8 @@
+Перший випуск із повним покриттям усіх 14 методів Marstek Device Open API (Rev 3.1):
+- Marstek.GetDevice (UDP Broadcast пошук та пряме опитування)
+- Wifi.GetStatus та BLE.GetStatus
+- Bat.GetStatus та PV.GetStatus (1 та 4 MPPT канали)
+- ES.GetStatus, ES.GetMode та ES.SetMode (Auto, AI, Manual, Passive, UPS)
+- EM.GetStatus (трансформатор струму CT та трифазний лічильник)
+- SYS команди: DOD.SET, Ble.Adv, Led.Ctrl, Set.Ver, Reset.Factory
+- Вбудований демо-симулятор та UDP JSON-RPC консоль
