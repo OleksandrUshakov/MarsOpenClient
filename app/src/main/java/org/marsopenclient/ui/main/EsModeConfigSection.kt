@@ -11,6 +11,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -21,7 +22,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -48,14 +48,16 @@ fun EsModeConfigSection(
 
   Column(
     modifier = modifier.fillMaxWidth(),
-    verticalArrangement = Arrangement.spacedBy(12.dp),
+    verticalArrangement = Arrangement.spacedBy(14.dp),
   ) {
-    // 3.6.3 ES.GetMode Current Status Card
-    Card(
+    // 1. Current Mode Summary Card (ES.GetMode)
+    ElevatedCard(
       modifier = Modifier.fillMaxWidth(),
-      colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+      colors = CardDefaults.elevatedCardColors(
+        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+      ),
     ) {
-      Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+      Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.SpaceBetween,
@@ -63,72 +65,66 @@ fun EsModeConfigSection(
         ) {
           Column(modifier = Modifier.weight(1f)) {
             Text(
-              text = "3.6.3 ES.GetMode (Поточний режим роботи)",
-              style = MaterialTheme.typography.titleMedium,
-              fontWeight = FontWeight.Bold,
+              text = "Поточний режим роботи станції",
+              style = MaterialTheme.typography.labelLarge,
             )
+            val modeRes = uiState.esMode
             Text(
-              text = "Примітка: параметри CT та фаз A/B/C активні у режимах Auto та AI",
-              style = MaterialTheme.typography.bodySmall,
+              text = friendlyModeLabel(modeRes?.mode ?: uiState.selectedEndpoint?.lastKnownMode),
+              style = MaterialTheme.typography.headlineSmall,
+              fontWeight = FontWeight.Bold,
             )
           }
           OutlinedButton(onClick = onQueryEsMode) {
-            Text("Опитати режим")
+            Text("Оновити")
           }
         }
 
         val modeRes = uiState.esMode
-        if (modeRes == null) {
-          Text("Натисніть «Опитати режим» для отримання ES.GetMode.", style = MaterialTheme.typography.bodySmall)
-        } else {
-          KeyValueRow("ID екземпляра (id)", "${modeRes.id ?: 0}")
-          KeyValueRow("Активний режим (mode)", modeRes.mode ?: "null")
-          KeyValueRow("Потужність в мережу (ongrid_power)", "${formatNum(modeRes.ongridPower)} W")
-          KeyValueRow("Резервна потужність (offgrid_power)", "${formatNum(modeRes.offgridPower)} W")
-          KeyValueRow("Заряд батареї (bat_soc)", "${formatNum(modeRes.batSoc)} %")
+        if (modeRes != null) {
+          HorizontalDivider()
+          KeyValueRow("Потужність мережі (On-Grid)", "${formatNum(modeRes.ongridPower)} Вт")
+          KeyValueRow("Резервне навантаження (Off-Grid)", "${formatNum(modeRes.offgridPower)} Вт")
+          KeyValueRow("Заряд акумулятора", "${formatNum(modeRes.batSoc)} %")
           KeyValueRow(
-            label = "Статус CT (ct_state)",
-            value = when (modeRes.ctState) {
-              1 -> "1: Connected (Підключено)"
-              0 -> "0: Not connected (Не підключено)"
-              else -> "null"
-            },
+            label = "Датчик струму (CT)",
+            value = if (modeRes.isCtConnected) "Підключено" else "Не підключено",
           )
-          KeyValueRow("Фаза A (a_power)", "${formatNum(modeRes.aPower)} W")
-          KeyValueRow("Фаза B (b_power)", "${formatNum(modeRes.bPower)} W")
-          KeyValueRow("Фаза C (c_power)", "${formatNum(modeRes.cPower)} W")
-          KeyValueRow("Загальна потужність CT (total_power)", "${formatNum(modeRes.totalPower)} W")
-          KeyValueRow(
-            label = "Вхідна енергія (input_energy)",
-            value = "${formatNum(modeRes.inputEnergyRaw)} [×0.1 Wh] (${formatNum(modeRes.inputEnergyWh)} Wh)",
-          )
-          KeyValueRow(
-            label = "Вихідна енергія (output_energy)",
-            value = "${formatNum(modeRes.outputEnergyRaw)} [×0.1 Wh] (${formatNum(modeRes.outputEnergyWh)} Wh)",
-          )
+          if (modeRes.isCtConnected) {
+            KeyValueRow("Потужність по фазах (A / B / C)", "${formatNum(modeRes.aPower)} / ${formatNum(modeRes.bPower)} / ${formatNum(modeRes.cPower)} Вт")
+            KeyValueRow("Сумарна потужність CT", "${formatNum(modeRes.totalPower)} Вт")
+          }
         }
       }
     }
 
-    // 3.6.2 ES.SetMode Configuration Card
+    // 2. Mode Selector & Configuration Card (ES.SetMode)
     Card(modifier = Modifier.fillMaxWidth()) {
       Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
-          text = "3.6.2 ES.SetMode (Налаштування режиму генерації)",
+          text = "Вибір та налаштування режиму",
           style = MaterialTheme.typography.titleMedium,
           fontWeight = FontWeight.Bold,
         )
         Text(
-          text = "Оберіть режим роботи пристрою (Auto, AI, Manual, Passive, UPS) та налаштуйте його параметри:",
+          text = "Оберіть бажаний режим роботи станції та натисніть кнопку «Застосувати режим» внизу:",
           style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          val modeShortTitles = mapOf(
+            EsOperatingMode.AUTO to "Авто (Auto)",
+            EsOperatingMode.AI to "ШІ (AI)",
+            EsOperatingMode.MANUAL to "За розкладом",
+            EsOperatingMode.PASSIVE to "Ручний з таймером",
+            EsOperatingMode.UPS to "ДБЖ (UPS)",
+          )
           EsOperatingMode.entries.forEach { modeOption ->
             FilterChip(
               selected = uiState.selectedEsModeTab == modeOption,
               onClick = { onSelectModeTab(modeOption) },
-              label = { Text(modeOption.wireName) },
+              label = { Text(modeShortTitles[modeOption] ?: modeOption.wireName) },
             )
           }
         }
@@ -138,12 +134,12 @@ fun EsModeConfigSection(
         when (uiState.selectedEsModeTab) {
           EsOperatingMode.AUTO -> {
             Text(
-              text = "Режим Auto (auto_cfg)",
+              text = "Автоматичний режим (Auto)",
               style = MaterialTheme.typography.titleSmall,
               fontWeight = FontWeight.Bold,
             )
             Text(
-              text = "Автоматичне балансування потужності за показниками трансформатора струму (CT) або розумного лічильника.",
+              text = "Станція автоматично компенсує споживання будинку на основі показників трансформатора струму (CT) або розумного лічильника, підтримуючи нульовий баланс із мережею.",
               style = MaterialTheme.typography.bodySmall,
             )
             Row(
@@ -151,7 +147,7 @@ fun EsModeConfigSection(
               horizontalArrangement = Arrangement.SpaceBetween,
               verticalAlignment = Alignment.CenterVertically,
             ) {
-              Text("auto_cfg.enable (1 = ON, 0 = OFF):")
+              Text("Активувати автоматичний режим:", fontWeight = FontWeight.Medium)
               Switch(
                 checked = uiState.autoModeEnable,
                 onCheckedChange = onUpdateAutoEnable,
@@ -161,12 +157,12 @@ fun EsModeConfigSection(
 
           EsOperatingMode.AI -> {
             Text(
-              text = "Режим AI (ai_cfg)",
+              text = "Інтелектуальний режим (AI)",
               style = MaterialTheme.typography.titleSmall,
               fontWeight = FontWeight.Bold,
             )
             Text(
-              text = "Інтелектуальна оптимізація накопичення та віддачі енергії (AI Mode).",
+              text = "Розумна оптимізація накопичення сонячної енергії та віддачі у пікові години на основі профілю споживання.",
               style = MaterialTheme.typography.bodySmall,
             )
             Row(
@@ -174,7 +170,7 @@ fun EsModeConfigSection(
               horizontalArrangement = Arrangement.SpaceBetween,
               verticalAlignment = Alignment.CenterVertically,
             ) {
-              Text("ai_cfg.enable (1 = ON, 0 = OFF):")
+              Text("Активувати режим ШІ:", fontWeight = FontWeight.Medium)
               Switch(
                 checked = uiState.aiModeEnable,
                 onCheckedChange = onUpdateAiEnable,
@@ -186,20 +182,24 @@ fun EsModeConfigSection(
             val mf = uiState.manualForm
             val maxSlot = activeProfile.maxManualTimeNum
             Text(
-              text = "Режим Manual (manual_cfg) — Розклад за часовими слотами",
+              text = "Робота за розкладом (Manual)",
               style = MaterialTheme.typography.titleSmall,
               fontWeight = FontWeight.Bold,
             )
             Text(
-              text = "Номер періоду time_num: Venus A/C/D/E підтримує 0–9; Venus E mini підтримує 0–5 (поточний ліміт профілю: 0–$maxSlot).",
+              text = "Дозволяє налаштувати до ${maxSlot + 1} часових періодів із фіксованою потужністю на обрані дні тижня.",
               style = MaterialTheme.typography.bodySmall,
+            )
+            Text(
+              text = "Оберіть номер інтервалу (слот 0–$maxSlot):",
+              style = MaterialTheme.typography.labelMedium,
             )
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
               (0..maxSlot).forEach { slot ->
                 FilterChip(
                   selected = mf.timeNum == slot,
                   onClick = { onUpdateManualForm { it.copy(timeNum = slot) } },
-                  label = { Text("#$slot") },
+                  label = { Text("Слот #$slot") },
                 )
               }
             }
@@ -211,28 +211,24 @@ fun EsModeConfigSection(
               OutlinedTextField(
                 value = mf.startTime,
                 onValueChange = { v -> onUpdateManualForm { it.copy(startTime = v) } },
-                label = { Text("start_time [hh:mm]") },
+                label = { Text("Початок (ГГ:ХХ)") },
                 singleLine = true,
                 modifier = Modifier.weight(1f),
               )
               OutlinedTextField(
                 value = mf.endTime,
                 onValueChange = { v -> onUpdateManualForm { it.copy(endTime = v) } },
-                label = { Text("end_time [hh:mm]") },
+                label = { Text("Кінець (ГГ:ХХ)") },
                 singleLine = true,
                 modifier = Modifier.weight(1f),
               )
             }
 
-            // Week Bitmask Builder (week_set: 0..127)
+            // Friendly Week Days Selector
             Text(
-              text = "Дні тижня (week_set): значення = ${mf.weekSet} • бінарний байт = ${WeekBitmask.toBinaryString(mf.weekSet)}",
+              text = "Дні тижня: ${WeekBitmask.toSelectedDaysSummary(mf.weekSet)}",
               style = MaterialTheme.typography.labelLarge,
-              fontFamily = FontFamily.Monospace,
-            )
-            Text(
-              text = "Обрано: ${WeekBitmask.toSelectedDaysSummary(mf.weekSet)} (молодші 7 біт: 1=Пн, 3=Пн+Вт, ..., 127=Всі дні)",
-              style = MaterialTheme.typography.bodySmall,
+              fontWeight = FontWeight.SemiBold,
             )
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
               WeekBitmask.DAYS.forEach { day ->
@@ -244,40 +240,46 @@ fun EsModeConfigSection(
                       it.copy(weekSet = WeekBitmask.toggleDay(it.weekSet, day.bitIndex))
                     }
                   },
-                  label = { Text("${day.shortNameUk} (${day.mask})") },
+                  label = { Text(day.shortNameUk) },
                 )
               }
             }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
               OutlinedButton(onClick = { onUpdateManualForm { it.copy(weekSet = 127) } }) {
-                Text("Всі дні (127)")
+                Text("Щодня")
               }
               OutlinedButton(onClick = { onUpdateManualForm { it.copy(weekSet = 31) } }) {
-                Text("Будні Пн-Пт (31)")
+                Text("Будні (Пн–Пт)")
               }
               OutlinedButton(onClick = { onUpdateManualForm { it.copy(weekSet = 96) } }) {
-                Text("Вихідні Сб-Нд (96)")
-              }
-              OutlinedButton(onClick = { onUpdateManualForm { it.copy(weekSet = 0) } }) {
-                Text("Очистити (0)")
+                Text("Вихідні (Сб–Нд)")
               }
             }
 
             OutlinedTextField(
               value = mf.powerWatts,
               onValueChange = { v -> onUpdateManualForm { it.copy(powerWatts = v) } },
-              label = { Text("Потужність (power, [W])") },
+              label = { Text("Задана потужність (Вт)") },
               singleLine = true,
               keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
               modifier = Modifier.fillMaxWidth(),
             )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+              listOf("150", "300", "500", "800", "1200", "2000").forEach { presetW ->
+                FilterChip(
+                  selected = mf.powerWatts == presetW,
+                  onClick = { onUpdateManualForm { it.copy(powerWatts = presetW) } },
+                  label = { Text("$presetW Вт") },
+                )
+              }
+            }
 
             Row(
               modifier = Modifier.fillMaxWidth(),
               horizontalArrangement = Arrangement.SpaceBetween,
               verticalAlignment = Alignment.CenterVertically,
             ) {
-              Text("Активувати слот розкладу (enable: 1=ON, 0=OFF):")
+              Text("Увімкнути цей інтервал розкладу:", fontWeight = FontWeight.Medium)
               Switch(
                 checked = mf.enable,
                 onCheckedChange = { v -> onUpdateManualForm { it.copy(enable = v) } },
@@ -292,12 +294,12 @@ fun EsModeConfigSection(
             ) {
               Column(modifier = Modifier.weight(1f)) {
                 Text(
-                  text = "Параметр manual_set (для Venus E mini)",
+                  text = "Напрямок роботи (для Venus E mini)",
                   style = MaterialTheme.typography.labelLarge,
                   fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                  text = "0: disable; 1: enable charge; 2: enable discharge; 3: auto",
+                  text = "Вибір між заряджанням, розряджанням та авто-режимом (manual_set)",
                   style = MaterialTheme.typography.bodySmall,
                 )
               }
@@ -322,36 +324,55 @@ fun EsModeConfigSection(
           EsOperatingMode.PASSIVE -> {
             val pf = uiState.passiveForm
             Text(
-              text = "Режим Passive (passive_cfg) — Пряме керування з таймером",
+              text = "Ручне керування з таймером (Passive)",
               style = MaterialTheme.typography.titleSmall,
               fontWeight = FontWeight.Bold,
             )
             Text(
-              text = "Встановлює задану потужність (power, [W]) на час зворотного відліку (cd_time, [s]).",
+              text = "Миттєво встановлює задану потужність (Вт) на вказаний час зворотного відліку.",
               style = MaterialTheme.typography.bodySmall,
             )
             OutlinedTextField(
               value = pf.powerWatts,
               onValueChange = { v -> onUpdatePassiveForm { it.copy(powerWatts = v) } },
-              label = { Text("Потужність (power, [W])") },
-              singleLine = true,
-              keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-              modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedTextField(
-              value = pf.cdTimeSeconds,
-              onValueChange = { v -> onUpdatePassiveForm { it.copy(cdTimeSeconds = v) } },
-              label = { Text("Таймер зворотного відліку (cd_time, [s])") },
+              label = { Text("Потужність (Вт)") },
               singleLine = true,
               keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
               modifier = Modifier.fillMaxWidth(),
             )
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-              listOf(60, 300, 900, 1800, 3600).forEach { sec ->
+              listOf("100", "300", "500", "800", "1500").forEach { w ->
+                FilterChip(
+                  selected = pf.powerWatts == w,
+                  onClick = { onUpdatePassiveForm { it.copy(powerWatts = w) } },
+                  label = { Text("$w Вт") },
+                )
+              }
+            }
+
+            OutlinedTextField(
+              value = pf.cdTimeSeconds,
+              onValueChange = { v -> onUpdatePassiveForm { it.copy(cdTimeSeconds = v) } },
+              label = { Text("Тривалість роботи (секунди)") },
+              singleLine = true,
+              keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+              modifier = Modifier.fillMaxWidth(),
+            )
+            Text("Швидкий вибір часу:", style = MaterialTheme.typography.labelMedium)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+              val presets = listOf(
+                60 to "1 хв",
+                300 to "5 хв",
+                900 to "15 хв",
+                1800 to "30 хв",
+                3600 to "1 год",
+                7200 to "2 год",
+              )
+              presets.forEach { (sec, label) ->
                 FilterChip(
                   selected = pf.cdTimeSeconds == sec.toString(),
                   onClick = { onUpdatePassiveForm { it.copy(cdTimeSeconds = sec.toString()) } },
-                  label = { Text("${sec}s") },
+                  label = { Text(label) },
                 )
               }
             }
@@ -360,35 +381,40 @@ fun EsModeConfigSection(
           EsOperatingMode.UPS -> {
             val uf = uiState.upsForm
             Text(
-              text = "Режим UPS (ups_cfg) — Безперебійне живлення",
+              text = "Джерело безперебійного живлення (UPS)",
               style = MaterialTheme.typography.titleSmall,
               fontWeight = FontWeight.Bold,
+            )
+            Text(
+              text = "Підтримує резервне живлення підключених споживачів на випадок зникнення електроенергії в мережі.",
+              style = MaterialTheme.typography.bodySmall,
             )
             Row(
               modifier = Modifier.fillMaxWidth(),
               horizontalArrangement = Arrangement.SpaceBetween,
               verticalAlignment = Alignment.CenterVertically,
             ) {
-              Text("ups_cfg.enable (1 = ON, 0 = OFF):")
+              Text("Увімкнути режим ДБЖ (UPS):", fontWeight = FontWeight.Medium)
               Switch(
                 checked = uf.enable,
                 onCheckedChange = { v -> onUpdateUpsForm { it.copy(enable = v) } },
               )
             }
             Text(
-              text = "Формат рядка mode у JSON (у прикладі стор. 14 — \"UPS\", у таблиці стор. 11 — \"Ups\"):",
+              text = "Варіант написання команди (для сумісності різних ревізій прошивок):",
               style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
               FilterChip(
                 selected = uf.useUppercaseWireMode,
                 onClick = { onUpdateUpsForm { it.copy(useUppercaseWireMode = true) } },
-                label = { Text("\"UPS\" (За прикладом JSON)") },
+                label = { Text("\"UPS\" (Стандарт)") },
               )
               FilterChip(
                 selected = !uf.useUppercaseWireMode,
                 onClick = { onUpdateUpsForm { it.copy(useUppercaseWireMode = false) } },
-                label = { Text("\"Ups\" (За таблицею)") },
+                label = { Text("\"Ups\" (Альтернативний)") },
               )
             }
           }
@@ -398,7 +424,7 @@ fun EsModeConfigSection(
           onClick = onApplyEsMode,
           modifier = Modifier.fillMaxWidth(),
         ) {
-          Text("Надіслати ES.SetMode (${uiState.selectedEsModeTab.wireName})")
+          Text("Застосувати режим «${uiState.selectedEsModeTab.displayName}»")
         }
       }
     }

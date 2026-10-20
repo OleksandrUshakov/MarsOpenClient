@@ -1,0 +1,5 @@
+Version 1.1:
+- Improved LAN UDP discovery and reliability on Android / GrapheneOS (explicit Wi-Fi network socket binding bypassing VPN/cellular, MulticastLock, port 30000 binding, /24 subnet unicast scan, serialized UDP queue with retries).
+- Added persistent local storage for discovered and manually configured Marstek stations.
+- Added diagnostic log export to file (.txt), clipboard copy, and share sheet.
+- Redesigned user interface with intuitive dashboard, power flow cards, and connection troubleshooting guide.

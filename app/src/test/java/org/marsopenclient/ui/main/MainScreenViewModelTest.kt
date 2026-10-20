@@ -8,11 +8,16 @@ import org.junit.Test
 import org.marsopenclient.api.ApiCallResult
 import org.marsopenclient.api.DeviceModelProfile
 import org.marsopenclient.api.EsSetModeConfig
+import org.marsopenclient.api.LanDiagnosticsInfo
 import org.marsopenclient.api.MarstekApiConstants
 import org.marsopenclient.api.MarstekEndpoint
 import org.marsopenclient.api.MarstekJsonCodec
 import org.marsopenclient.api.MarstekSimulatedDevice
+import org.marsopenclient.api.PacketLogEntry
 import org.marsopenclient.api.WeekBitmask
+import org.marsopenclient.data.InMemoryAppStorage
+import org.marsopenclient.data.LogReportFormatter
+import org.marsopenclient.data.PersistedAppConfig
 
 /**
  * Comprehensive unit test suite verifying 100% of the Marstek Device Open API (Rev 3.1)
@@ -284,5 +289,62 @@ class MainScreenViewModelTest {
       assertNotNull(template)
       assertTrue(template.contains(method))
     }
+  }
+
+  @Test
+  fun localStoreAndDiagnosticReport_persistAndFormatCorrectly() {
+    val storage = InMemoryAppStorage()
+    val endpoint = MarstekEndpoint(
+      id = "lan:192.168.1.50:30000",
+      name = "VenusE (192.168.1.50)",
+      ip = "192.168.1.50",
+      port = 30000,
+      deviceModel = "VenusE",
+      firmwareVersion = 154,
+      isSimulated = false,
+      lastKnownSoc = 84,
+      lastKnownMode = "Auto",
+    )
+    storage.saveConfig(
+      PersistedAppConfig(
+        savedDevices = listOf(endpoint),
+        selectedDeviceId = endpoint.id,
+        demoModeEnabled = false,
+        defaultUdpPort = 30000,
+      )
+    )
+    val loaded = storage.loadConfig()
+    assertEquals(1, loaded.savedDevices.size)
+    assertEquals("192.168.1.50", loaded.savedDevices.first().ip)
+
+    val sampleLog = PacketLogEntry(
+      id = 1L,
+      timestampMillis = 1729410000000L,
+      direction = PacketLogEntry.Direction.SENT,
+      endpointAddress = "192.168.1.50:30000 (local:30000, wifiBound=true)",
+      method = "Marstek.GetDevice",
+      payload = """{"id":1,"method":"Marstek.GetDevice","params":{"ble_mac":"0"}}""",
+      isError = false,
+      latencyMs = 42L,
+    )
+    storage.saveLogs(listOf(sampleLog))
+    assertEquals(1, storage.loadLogs().size)
+
+    val report = LogReportFormatter.buildDiagnosticReport(
+      lanInfo = LanDiagnosticsInfo(
+        localIpv4 = "192.168.1.10",
+        subnetPrefix = "192.168.1",
+        broadcastAddresses = listOf("192.168.1.255", "255.255.255.255"),
+        networkInterfaceName = "wlan0",
+        isWifiTransportActive = true,
+        isVpnActive = false,
+      ),
+      selectedEndpoint = endpoint,
+      savedDevices = loaded.savedDevices,
+      logs = storage.loadLogs(),
+    )
+    assertTrue(report.contains("MarsOpenClient — Діагностичний журнал"))
+    assertTrue(report.contains("192.168.1.50:30000"))
+    assertTrue(report.contains("Marstek.GetDevice"))
   }
 }

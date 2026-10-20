@@ -148,6 +148,9 @@ data class MarstekEndpoint(
   val wifiName: String? = null,
   val isSimulated: Boolean = false,
   val simulatedProfile: DeviceModelProfile = DeviceModelProfile.inferFromDeviceName(deviceModel),
+  val lastSeenMillis: Long? = null,
+  val lastKnownSoc: Int? = null,
+  val lastKnownMode: String? = null,
 ) {
   val profile: DeviceModelProfile
     get() = if (isSimulated) simulatedProfile else DeviceModelProfile.inferFromDeviceName(deviceModel)

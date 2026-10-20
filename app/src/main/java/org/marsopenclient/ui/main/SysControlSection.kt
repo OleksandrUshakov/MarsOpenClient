@@ -13,6 +13,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -59,12 +60,12 @@ fun SysControlSection(
     val resetOption = pendingResetType!!
     AlertDialog(
       onDismissRequest = { pendingResetType = null },
-      title = { Text("Підтвердження Reset.Factory") },
+      title = { Text("Підтвердження скидання налаштувань") },
       text = {
         Text(
-          "Ви дійсно бажаєте виконати команду скидання до заводських налаштувань?\n\n" +
-            "${resetOption.titleUk}\n(${resetOption.descriptionUk})\n\n" +
-            "Цільовий пристрій: ${endpoint?.name ?: "—"} (${endpoint?.ip})"
+          "Ви дійсно бажаєте скинути станцію до заводських налаштувань?\n\n" +
+            "${resetOption.titleUk}\n\n" +
+            "Станція: ${endpoint?.name ?: "—"} (${endpoint?.ip})"
         )
       },
       confirmButton = {
@@ -75,7 +76,7 @@ fun SysControlSection(
           },
           colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
         ) {
-          Text("Виконати Reset.Factory (type=${resetOption.typeCode})")
+          Text("Підтвердити скидання")
         }
       },
       dismissButton = {
@@ -88,67 +89,41 @@ fun SysControlSection(
 
   Column(
     modifier = modifier.fillMaxWidth(),
-    verticalArrangement = Arrangement.spacedBy(12.dp),
+    verticalArrangement = Arrangement.spacedBy(14.dp),
   ) {
-    // Firmware & Model Compatibility Banner (Chapter 4)
-    Card(
+    // 1. DOD (Depth of Discharge) Card
+    ElevatedCard(
       modifier = Modifier.fillMaxWidth(),
-      colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+      colors = CardDefaults.elevatedCardColors(
+        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+      ),
     ) {
-      Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+      Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-          text = "3.8 SYS — Системні команди керування",
+          text = "Глибина розряду батареї (DOD)",
           style = MaterialTheme.typography.titleMedium,
           fontWeight = FontWeight.Bold,
         )
         Text(
-          text = "Профіль пристрою: ${profile.displayName} • Прошивка: ${endpoint?.firmwareVersion ?: "невідома"}",
-          style = MaterialTheme.typography.bodyMedium,
-          fontWeight = FontWeight.SemiBold,
+          text = "Визначає, яку максимальну частку заряду дозволено використовувати. За замовчуванням 88% (тобто 12% завжди залишається у резерві).",
+          style = MaterialTheme.typography.bodySmall,
         )
-        if (endpoint != null && !endpoint.isSysFirmwareSupported) {
-          Text(
-            text = "Увага (Розділ IV): Для моделей Venus C/E/D/A команди SYS потребують версії прошивки FW >= 150 (поточна: ${endpoint.firmwareVersion}).",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.error,
-          )
-        }
         Row(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically,
         ) {
           Text(
-            text = "Додавати params.id (${uiState.instanceId}) у запити SYS:",
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.weight(1f),
+            text = "Дозволений розряд (DOD): ${uiState.dodSliderValue}%",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
           )
-          Switch(
-            checked = uiState.includeInstanceIdInSys,
-            onCheckedChange = onToggleIncludeInstanceId,
+          Text(
+            text = "Мін. резерв заряду: ${100 - uiState.dodSliderValue}%",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
           )
         }
-      }
-    }
-
-    // 3.8.1 DOD.SET
-    Card(modifier = Modifier.fillMaxWidth()) {
-      Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-          text = "3.8.1 Глибина розряду — DOD (DOD.SET)",
-          style = MaterialTheme.typography.titleMedium,
-          fontWeight = FontWeight.Bold,
-        )
-        Text(
-          text = "Діапазон налаштування: 30–88% (значення за замовчуванням: 88%).",
-          style = MaterialTheme.typography.bodySmall,
-        )
-        Text(
-          text = "Обране значення DOD: ${uiState.dodSliderValue}% (Залишок у резерві: ${100 - uiState.dodSliderValue}%)",
-          style = MaterialTheme.typography.titleSmall,
-          fontWeight = FontWeight.SemiBold,
-          color = MaterialTheme.colorScheme.primary,
-        )
         Slider(
           value = uiState.dodSliderValue.toFloat(),
           onValueChange = { onUpdateDodSlider(it.roundToInt()) },
@@ -156,11 +131,11 @@ fun SysControlSection(
           steps = MarstekApiConstants.MAX_DOD_VALUE - MarstekApiConstants.MIN_DOD_VALUE - 1,
         )
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          listOf(30, 50, 70, 80, 88).forEach { preset ->
+          listOf(50, 70, 80, 85, 88).forEach { preset ->
             FilterChip(
               selected = uiState.dodSliderValue == preset,
               onClick = { onUpdateDodSlider(preset) },
-              label = { Text(if (preset == 88) "88% (Default)" else "$preset%") },
+              label = { Text(if (preset == 88) "88% (Стандарт)" else "$preset% (резерв ${100 - preset}%)") },
             )
           }
         }
@@ -168,54 +143,24 @@ fun SysControlSection(
           onClick = { onSendDod(uiState.dodSliderValue) },
           modifier = Modifier.fillMaxWidth(),
         ) {
-          Text("Застосувати DOD.SET (value = ${uiState.dodSliderValue})")
+          Text("Зберегти глибину розряду (${uiState.dodSliderValue}%)")
         }
       }
     }
 
-    // 3.8.2 Ble_block (Ble.Adv)
+    // 2. Panel LED & Bluetooth Lock Card
     Card(modifier = Modifier.fillMaxWidth()) {
-      Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+      Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
-          text = "3.8.2 Блокування Bluetooth — Ble_block (Ble.Adv)",
+          text = "Індикація корпусу та захист Bluetooth",
           style = MaterialTheme.typography.titleMedium,
           fontWeight = FontWeight.Bold,
         )
-        Text(
-          text = "Керування Bluetooth-трансляцією пристрою. Зверніть увагу на коди в специфікації: 0 = enable (увімкнути трансляцію), 1 = disable (вимкнути/заблокувати).",
-          style = MaterialTheme.typography.bodySmall,
-        )
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-          Button(
-            onClick = { onSendBleAdv(0) },
-            modifier = Modifier.weight(1f),
-          ) {
-            Text("Увімкнути BLE (enable: 0)")
-          }
-          OutlinedButton(
-            onClick = { onSendBleAdv(1) },
-            modifier = Modifier.weight(1f),
-          ) {
-            Text("Заблокувати BLE (enable: 1)")
-          }
-        }
-      }
-    }
 
-    // 3.8.3 Led_Ctrl (Led.Ctrl)
-    Card(modifier = Modifier.fillMaxWidth()) {
-      Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-          text = "3.8.3 Індикація панелі — Led_Ctrl (Led.Ctrl)",
-          style = MaterialTheme.typography.titleMedium,
-          fontWeight = FontWeight.Bold,
-        )
-        Text(
-          text = "Керування світлодіодами передньої панелі пристрою: 1 = ON (увімкнено), 0 = OFF (вимкнено).",
-          style = MaterialTheme.typography.bodySmall,
+          text = "Світлодіодна індикація на передній панелі станції:",
+          style = MaterialTheme.typography.bodyMedium,
+          fontWeight = FontWeight.Medium,
         )
         Row(
           modifier = Modifier.fillMaxWidth(),
@@ -225,33 +170,58 @@ fun SysControlSection(
             onClick = { onSendLedCtrl(1) },
             modifier = Modifier.weight(1f),
           ) {
-            Text("Увімкнути LED (state: 1)")
+            Text("Увімкнути LED")
           }
           OutlinedButton(
             onClick = { onSendLedCtrl(0) },
             modifier = Modifier.weight(1f),
           ) {
-            Text("Вимкнути LED (state: 0)")
+            Text("Вимкнути LED (Нічний)")
+          }
+        }
+
+        HorizontalDivider()
+
+        Text(
+          text = "Трансляція Bluetooth (захист від стороннього підключення):",
+          style = MaterialTheme.typography.bodyMedium,
+          fontWeight = FontWeight.Medium,
+        )
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+          Button(
+            onClick = { onSendBleAdv(0) },
+            modifier = Modifier.weight(1f),
+          ) {
+            Text("Дозволити Bluetooth")
+          }
+          OutlinedButton(
+            onClick = { onSendBleAdv(1) },
+            modifier = Modifier.weight(1f),
+          ) {
+            Text("Заблокувати Bluetooth")
           }
         }
       }
     }
 
-    // 3.8.4 Version_Set (Set.Ver)
+    // 3. Inverter Power Version Card (Set.Ver)
     Card(modifier = Modifier.fillMaxWidth()) {
       Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-          text = "3.8.4 Версія потужності — Version_Set (Set.Ver)",
+          text = "Потужність інвертора (Set.Ver)",
           style = MaterialTheme.typography.titleMedium,
           fontWeight = FontWeight.Bold,
         )
         Text(
-          text = "Налаштування ліміту потужності заряду/розряду: 800W, 1200W (VA), 1500W (VA), 2200W (VD), 2500W (VE).",
+          text = "Встановлює максимальну потужність заряду та віддачі відповідно до моделі станції та регіональних обмежень (напр. 800 Вт або 2500 Вт).",
           style = MaterialTheme.typography.bodySmall,
         )
         if (!profile.supportsVersionSet) {
           Text(
-            text = "Примітка (Розділ 4.3): Venus E mini підтримує лише DOD, Ble_block та Led_Ctrl у розділі SYS.",
+            text = "Примітка: Модель Venus E mini має фіксовану потужність 800 Вт.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.error,
           )
@@ -273,7 +243,7 @@ fun SysControlSection(
           OutlinedTextField(
             value = uiState.customVersionWatts,
             onValueChange = onUpdateCustomVersionWatts,
-            label = { Text("version [W]") },
+            label = { Text("Ліміт потужності (Вт)") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.weight(1f),
@@ -284,23 +254,23 @@ fun SysControlSection(
               onSendSetVersion(v)
             },
           ) {
-            Text("Надіслати Set.Ver")
+            Text("Застосувати")
           }
         }
       }
     }
 
-    // 3.8.5 Factory_Reset (Reset.Factory)
+    // 4. Factory Reset & Compatibility Card
     Card(modifier = Modifier.fillMaxWidth()) {
-      Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+      Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
-          text = "3.8.5 Скидання до заводських налаштувань — Factory_Reset (Reset.Factory)",
+          text = "Скидання до заводських налаштувань",
           style = MaterialTheme.typography.titleMedium,
           fontWeight = FontWeight.Bold,
         )
-        if (!profile.supportsFactoryReset) {
+        if (endpoint != null && !endpoint.isSysFirmwareSupported) {
           Text(
-            text = "Примітка (Розділ 4.3): Venus E mini не підтримує команду Reset.Factory.",
+            text = "Примітка: Системні команди SYS для Venus A/C/D/E потребують прошивки версії 150 або новішої (поточна: ${endpoint.firmwareVersion}).",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.error,
           )
@@ -310,35 +280,26 @@ fun SysControlSection(
             onClick = { pendingResetType = resetType },
             modifier = Modifier.fillMaxWidth(),
           ) {
-            Text("${resetType.titleUk}")
+            Text(resetType.titleUk)
           }
         }
-      }
-    }
 
-    // Chapter IV: Device Support Matrix Reference Card
-    Card(modifier = Modifier.fillMaxWidth()) {
-      Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(
-          text = "Розділ IV: Матриця підтримки пристроїв Marstek (Rev 3.1)",
-          style = MaterialTheme.typography.titleSmall,
-          fontWeight = FontWeight.Bold,
-        )
         HorizontalDivider()
-        Text(
-          text = "4.1 Venus C / Venus E:\n• 1. Marstek, 2. WiFi, 3. Bluetooth, 4. Battery, 5. ES, 6. EM, 7. SYS (FW >= 150)\n• Manual time_num: 0–9",
-          style = MaterialTheme.typography.bodySmall,
-        )
-        HorizontalDivider()
-        Text(
-          text = "4.2 Venus D / Venus A:\n• 1. Marstek, 2. WiFi, 3. Bluetooth, 4. Battery, 5. PV (only for Venus A/D), 6. ES, 7. EM, 8. SYS (FW >= 150)\n• Manual time_num: 0–9",
-          style = MaterialTheme.typography.bodySmall,
-        )
-        HorizontalDivider()
-        Text(
-          text = "4.3 Venus E mini:\n• 1. Marstek, 2. WiFi, 3. Bluetooth, 4. Battery, 5. ES, 6. EM, 7. SYS (лише DOD, Ble_block, Led_Ctrl)\n• Manual time_num: 0–5, підтримує manual_set (0..3)",
-          style = MaterialTheme.typography.bodySmall,
-        )
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Text(
+            text = "Додавати ідентифікатор каналу (params.id = ${uiState.instanceId}) у системні команди:",
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.weight(1f),
+          )
+          Switch(
+            checked = uiState.includeInstanceIdInSys,
+            onCheckedChange = onToggleIncludeInstanceId,
+          )
+        }
       }
     }
   }

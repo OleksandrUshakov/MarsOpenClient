@@ -2,11 +2,14 @@ package org.marsopenclient.ui.main
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -17,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -26,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -40,8 +45,11 @@ import org.marsopenclient.theme.MarsOpenClientTheme
 fun MainScreen(
   onItemClick: (NavKey) -> Unit = {},
   modifier: Modifier = Modifier,
-  viewModel: MarstekDashboardViewModel = viewModel { MarstekDashboardViewModel() },
 ) {
+  val appContext = LocalContext.current.applicationContext
+  val viewModel: MarstekDashboardViewModel = viewModel {
+    MarstekDashboardViewModel.createWithContext(appContext)
+  }
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
   val packetLogs by viewModel.packetLogs.collectAsStateWithLifecycle()
 
@@ -54,8 +62,11 @@ fun MainScreen(
     onToggleAutoPoll = viewModel::toggleAutoPoll,
     onSelectEndpoint = viewModel::selectEndpoint,
     onUpdateDiscoveryConfig = viewModel::updateDiscoveryConfig,
+    onToggleDeepSubnetScan = viewModel::toggleDeepSubnetScan,
     onRunDiscovery = viewModel::runLanDiscovery,
-    onAddManualDevice = viewModel::addManualEndpoint,
+    onSaveOrUpdateDevice = viewModel::saveOrUpdateDevice,
+    onDeleteSavedDevice = viewModel::deleteSavedDevice,
+    onToggleDemoMode = viewModel::toggleDemoMode,
     onUpdateInstanceId = viewModel::updateInstanceId,
     onQueryDeviceInfo = viewModel::queryDeviceInfo,
     onQueryWifi = viewModel::queryWifiStatus,
@@ -83,12 +94,14 @@ fun MainScreen(
     onSelectConsoleMethod = viewModel::selectConsoleMethodTemplate,
     onUpdateConsoleRequest = viewModel::updateConsoleRawRequest,
     onSendConsoleRequest = viewModel::sendConsoleRawRequest,
+    onBuildDiagnosticReport = viewModel::buildDiagnosticLogText,
+    onNotifyMessage = viewModel::notifyBanner,
     onClearLogs = viewModel::clearLogs,
     modifier = modifier,
   )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun MarsOpenClientAppContent(
   uiState: MarstekUiState,
@@ -99,8 +112,11 @@ fun MarsOpenClientAppContent(
   onToggleAutoPoll: (Boolean) -> Unit,
   onSelectEndpoint: (org.marsopenclient.api.MarstekEndpoint) -> Unit,
   onUpdateDiscoveryConfig: (String, String) -> Unit,
+  onToggleDeepSubnetScan: (Boolean) -> Unit,
   onRunDiscovery: () -> Unit,
-  onAddManualDevice: (String, String, Int, String, Int?) -> Unit,
+  onSaveOrUpdateDevice: (String?, String, String, Int, String, Int?) -> Unit,
+  onDeleteSavedDevice: (String) -> Unit,
+  onToggleDemoMode: (Boolean) -> Unit,
   onUpdateInstanceId: (Int) -> Unit,
   onQueryDeviceInfo: (String?) -> Unit,
   onQueryWifi: () -> Unit,
@@ -128,6 +144,8 @@ fun MarsOpenClientAppContent(
   onSelectConsoleMethod: (String) -> Unit,
   onUpdateConsoleRequest: (String) -> Unit,
   onSendConsoleRequest: () -> Unit,
+  onBuildDiagnosticReport: () -> String,
+  onNotifyMessage: (String, Boolean) -> Unit,
   onClearLogs: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
@@ -139,17 +157,44 @@ fun MarsOpenClientAppContent(
       TopAppBar(
         title = {
           Column {
-            Text(
-              text = "MarsOpenClient • Marstek API v3.1",
-              style = MaterialTheme.typography.titleMedium,
-              fontWeight = FontWeight.Bold,
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis,
-            )
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+              Text(
+                text = activeEndpoint?.name ?: "MarsOpenClient",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+              )
+              if (activeEndpoint != null) {
+                Surface(
+                  color = when {
+                    uiState.isLoadingAll -> MaterialTheme.colorScheme.secondary
+                    uiState.isConnectedOnline -> MaterialTheme.colorScheme.primary
+                    else -> MaterialTheme.colorScheme.error
+                  },
+                  shape = RoundedCornerShape(10.dp),
+                ) {
+                  Text(
+                    text = when {
+                      uiState.isLoadingAll -> "Опитування..."
+                      uiState.isConnectedOnline -> "Онлайн"
+                      else -> "Офлайн"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                  )
+                }
+              }
+            }
             Text(
               text = activeEndpoint?.let {
-                "${if (it.isSimulated) "[DEMO] " else "[LAN] "}${it.name} (${it.ip}:${it.port})"
-              } ?: "Пристрій не обрано",
+                "${if (it.isSimulated) "[Демо] " else ""}${it.deviceModel} • ${it.ip}:${it.port}"
+              } ?: "Станцію не обрано • Натисніть «Пристрої» для пошуку",
               style = MaterialTheme.typography.bodySmall,
               maxLines = 1,
               overflow = TextOverflow.Ellipsis,
@@ -157,12 +202,14 @@ fun MarsOpenClientAppContent(
           }
         },
         actions = {
-          Button(
-            onClick = onRefreshAll,
-            enabled = !uiState.isLoadingAll,
-            modifier = Modifier.padding(end = 8.dp),
-          ) {
-            Text(if (uiState.isLoadingAll) "..." else "Оновити")
+          if (activeEndpoint != null) {
+            Button(
+              onClick = onRefreshAll,
+              enabled = !uiState.isLoadingAll,
+              modifier = Modifier.padding(end = 8.dp),
+            ) {
+              Text(if (uiState.isLoadingAll) "..." else "Оновити")
+            }
           }
         },
         colors = TopAppBarDefaults.topAppBarColors(
@@ -174,21 +221,20 @@ fun MarsOpenClientAppContent(
     bottomBar = {
       NavigationBar {
         AppSection.entries.forEach { section ->
-          val badgeIcon = when (section) {
-            AppSection.DEVICES -> "LAN"
-            AppSection.DASHBOARD -> "ES/PV"
-            AppSection.ES_MODE -> "MODE"
-            AppSection.SYS_CONTROL -> "SYS"
-            AppSection.CONSOLE -> "UDP"
+          val badgeSymbol = when (section) {
+            AppSection.DASHBOARD -> "⚡"
+            AppSection.ES_MODE -> "🔄"
+            AppSection.DEVICES -> "📡"
+            AppSection.SYS_CONTROL -> "⚙️"
+            AppSection.CONSOLE -> "📋"
           }
           NavigationBarItem(
             selected = uiState.currentSection == section,
             onClick = { onSelectSection(section) },
             icon = {
               Text(
-                text = badgeIcon,
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.ExtraBold,
+                text = badgeSymbol,
+                fontSize = 16.sp,
               )
             },
             label = {
@@ -210,53 +256,55 @@ fun MarsOpenClientAppContent(
         .padding(innerPadding)
         .verticalScroll(rememberScrollState())
         .padding(12.dp),
-      verticalArrangement = Arrangement.spacedBy(10.dp),
+      verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-      // Quick Device Switcher & Auto-Poll Bar
-      Card(
-        colors = CardDefaults.cardColors(
-          containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-        ),
-        modifier = Modifier.fillMaxWidth(),
-      ) {
-        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-          ) {
-            Text(
-              text = "Швидкий вибір пристрою:",
-              style = MaterialTheme.typography.labelMedium,
-              fontWeight = FontWeight.Bold,
-            )
+      // Quick Station Switcher & Auto-Poll Bar (shown when at least one station exists)
+      if (uiState.endpoints.isNotEmpty()) {
+        Card(
+          colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+          ),
+          modifier = Modifier.fillMaxWidth(),
+        ) {
+          Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
               verticalAlignment = Alignment.CenterVertically,
+            ) {
+              Text(
+                text = "Ваші станції:",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+              )
+              Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+              ) {
+                Text("Авто-оновлення (5с):", style = MaterialTheme.typography.labelSmall)
+                Switch(
+                  checked = uiState.autoPollEnabled,
+                  onCheckedChange = onToggleAutoPoll,
+                )
+              }
+            }
+            FlowRow(
+              modifier = Modifier.fillMaxWidth(),
               horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-              Text("Авто-опитування (5с):", style = MaterialTheme.typography.labelSmall)
-              Switch(
-                checked = uiState.autoPollEnabled,
-                onCheckedChange = onToggleAutoPoll,
-              )
-            }
-          }
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-          ) {
-            uiState.endpoints.take(3).forEach { ep ->
-              FilterChip(
-                selected = ep.id == activeEndpoint?.id,
-                onClick = { onSelectEndpoint(ep) },
-                label = {
-                  Text(
-                    text = ep.deviceModel,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                  )
-                },
-              )
+              uiState.endpoints.forEach { ep ->
+                FilterChip(
+                  selected = ep.id == activeEndpoint?.id,
+                  onClick = { onSelectEndpoint(ep) },
+                  label = {
+                    Text(
+                      text = ep.name,
+                      maxLines = 1,
+                      overflow = TextOverflow.Ellipsis,
+                    )
+                  },
+                )
+              }
             }
           }
         }
@@ -292,7 +340,7 @@ fun MarsOpenClientAppContent(
               modifier = Modifier.weight(1f),
             )
             TextButton(onClick = onDismissBanner) {
-              Text("OK")
+              Text("Закрити")
             }
           }
         }
@@ -300,19 +348,6 @@ fun MarsOpenClientAppContent(
 
       // Main Section Content
       when (uiState.currentSection) {
-        AppSection.DEVICES -> {
-          DevicesNetworkSection(
-            uiState = uiState,
-            onSelectEndpoint = onSelectEndpoint,
-            onUpdateDiscoveryConfig = onUpdateDiscoveryConfig,
-            onRunDiscovery = onRunDiscovery,
-            onAddManualDevice = onAddManualDevice,
-            onUpdateInstanceId = onUpdateInstanceId,
-            onQueryDeviceInfo = onQueryDeviceInfo,
-            onQueryWifi = onQueryWifi,
-            onQueryBle = onQueryBle,
-          )
-        }
         AppSection.DASHBOARD -> {
           MonitoringDashboardSection(
             uiState = uiState,
@@ -320,6 +355,11 @@ fun MarsOpenClientAppContent(
             onQueryBatteryStatus = onQueryBattery,
             onQueryPvStatus = onQueryPv,
             onQueryEmStatus = onQueryEmStatus,
+            onRunDiscovery = onRunDiscovery,
+            onGoToDevices = { onSelectSection(AppSection.DEVICES) },
+            onGoToModes = { onSelectSection(AppSection.ES_MODE) },
+            onGoToLogs = { onSelectSection(AppSection.CONSOLE) },
+            onEnableDemoMode = { onToggleDemoMode(true) },
           )
         }
         AppSection.ES_MODE -> {
@@ -333,6 +373,22 @@ fun MarsOpenClientAppContent(
             onUpdatePassiveForm = onUpdatePassiveForm,
             onUpdateUpsForm = onUpdateUpsForm,
             onApplyEsMode = onApplyEsMode,
+          )
+        }
+        AppSection.DEVICES -> {
+          DevicesNetworkSection(
+            uiState = uiState,
+            onSelectEndpoint = onSelectEndpoint,
+            onUpdateDiscoveryConfig = onUpdateDiscoveryConfig,
+            onToggleDeepSubnetScan = onToggleDeepSubnetScan,
+            onRunDiscovery = onRunDiscovery,
+            onSaveOrUpdateDevice = onSaveOrUpdateDevice,
+            onDeleteSavedDevice = onDeleteSavedDevice,
+            onToggleDemoMode = onToggleDemoMode,
+            onUpdateInstanceId = onUpdateInstanceId,
+            onQueryDeviceInfo = onQueryDeviceInfo,
+            onQueryWifi = onQueryWifi,
+            onQueryBle = onQueryBle,
           )
         }
         AppSection.SYS_CONTROL -> {
@@ -356,6 +412,8 @@ fun MarsOpenClientAppContent(
             onUpdateRawRequest = onUpdateConsoleRequest,
             onSendRawRequest = onSendConsoleRequest,
             onClearLogs = onClearLogs,
+            onBuildDiagnosticReport = onBuildDiagnosticReport,
+            onNotifyMessage = onNotifyMessage,
           )
         }
       }

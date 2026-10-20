@@ -4,6 +4,10 @@ plugins {
   alias(libs.plugins.kotlin.serialization)
 }
 
+System.getenv("MARS_BUILD_DIR")?.takeIf { it.isNotBlank() }?.let { customBuildDir ->
+    layout.buildDirectory.set(file(customBuildDir))
+}
+
 android {
     namespace = "org.marsopenclient"
     compileSdk = 36
@@ -11,8 +15,8 @@ android {
         applicationId = "org.marsopenclient"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
     }
 
     signingConfigs {

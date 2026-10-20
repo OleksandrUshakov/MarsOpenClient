@@ -19,9 +19,10 @@ class MainScreenTest {
 
   @Test
   fun appHeader_andSections_exist() {
-    composeTestRule.onNodeWithText("MarsOpenClient • Marstek API v3.1").assertExists()
-    composeTestRule.onNodeWithText("Моніторинг").assertExists()
-    composeTestRule.onNodeWithText("Режими ES").assertExists()
-    composeTestRule.onNodeWithText("Система SYS").assertExists()
+    composeTestRule.onNodeWithText("Головна").assertExists()
+    composeTestRule.onNodeWithText("Режими").assertExists()
+    composeTestRule.onNodeWithText("Пристрої").assertExists()
+    composeTestRule.onNodeWithText("Налаштування").assertExists()
+    composeTestRule.onNodeWithText("Журнал").assertExists()
   }
 }

@@ -10,16 +10,22 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,6 +37,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import org.marsopenclient.api.MarstekApiConstants
 import org.marsopenclient.api.MarstekEndpoint
 
@@ -40,43 +49,60 @@ fun DevicesNetworkSection(
   uiState: MarstekUiState,
   onSelectEndpoint: (MarstekEndpoint) -> Unit,
   onUpdateDiscoveryConfig: (port: String, bleMac: String) -> Unit,
+  onToggleDeepSubnetScan: (Boolean) -> Unit = {},
   onRunDiscovery: () -> Unit,
-  onAddManualDevice: (name: String, ip: String, port: Int, model: String, fw: Int?) -> Unit,
+  onSaveOrUpdateDevice: (existingId: String?, name: String, ip: String, port: Int, model: String, fw: Int?) -> Unit,
+  onDeleteSavedDevice: (String) -> Unit = {},
+  onToggleDemoMode: (Boolean) -> Unit = {},
   onUpdateInstanceId: (Int) -> Unit,
   onQueryDeviceInfo: (String?) -> Unit,
   onQueryWifi: () -> Unit,
   onQueryBle: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  var showAddForm by rememberSaveable { mutableStateOf(false) }
-  var manualName by rememberSaveable { mutableStateOf("") }
-  var manualIp by rememberSaveable { mutableStateOf("192.168.1.11") }
-  var manualPort by rememberSaveable { mutableStateOf(MarstekApiConstants.DEFAULT_UDP_PORT.toString()) }
-  var manualModel by rememberSaveable { mutableStateOf("VenusD") }
-  var manualFw by rememberSaveable { mutableStateOf("154") }
+  var showEditForm by rememberSaveable { mutableStateOf(false) }
+  var editingDeviceId by rememberSaveable { mutableStateOf<String?>(null) }
+  var formName by rememberSaveable { mutableStateOf("") }
+  var formIp by rememberSaveable {
+    mutableStateOf(
+      uiState.lanDiagnostics.subnetPrefix?.let { "$it.50" } ?: "192.168.1.50"
+    )
+  }
+  var formPort by rememberSaveable { mutableStateOf(MarstekApiConstants.DEFAULT_UDP_PORT.toString()) }
+  var formModel by rememberSaveable { mutableStateOf("VenusE") }
+  var formFw by rememberSaveable { mutableStateOf("154") }
 
   Column(
     modifier = modifier.fillMaxWidth(),
-    verticalArrangement = Arrangement.spacedBy(12.dp),
+    verticalArrangement = Arrangement.spacedBy(14.dp),
   ) {
-    // 2.2.2 LAN UDP Discovery Card
-    Card(
+    // 1. Automatic LAN Search & Discovery Card
+    ElevatedCard(
       modifier = Modifier.fillMaxWidth(),
-      colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+      colors = CardDefaults.elevatedCardColors(
+        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+      ),
     ) {
       Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
-          text = "2.2.2 Пошук пристроїв у LAN (UDP Broadcast)",
+          text = "Пошук станцій Marstek у Wi-Fi мережі",
           style = MaterialTheme.typography.titleMedium,
           fontWeight = FontWeight.Bold,
         )
         Text(
-          text = "Відправляє широкомовний пакет Marstek.GetDevice у локальну мережу. Порт за замовчуванням: 30000 (рекомендований діапазон у додатку Marstek: 49152–65535).",
+          text = uiState.lanDiagnostics.summaryText,
+          style = MaterialTheme.typography.bodySmall,
+          fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+          text = "Усі знайдені станції автоматично зберігаються у пам'яті смартфона. Стандартний UDP-порт Open API у додатку Marstek — 30000 (або рекомендований 49152–65535).",
           style = MaterialTheme.typography.bodySmall,
         )
+
         Row(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.spacedBy(8.dp),
+          verticalAlignment = Alignment.CenterVertically,
         ) {
           OutlinedTextField(
             value = uiState.discoveryPort,
@@ -86,14 +112,54 @@ fun DevicesNetworkSection(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.weight(1f),
           )
-          OutlinedTextField(
-            value = uiState.discoveryBleMac,
-            onValueChange = { onUpdateDiscoveryConfig(uiState.discoveryPort, it) },
-            label = { Text("ble_mac (\"0\" = всі)") },
-            singleLine = true,
-            modifier = Modifier.weight(1.3f),
+          FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.weight(1.4f),
+          ) {
+            listOf("30000", "49152", "50000").forEach { presetPort ->
+              FilterChip(
+                selected = uiState.discoveryPort.trim() == presetPort,
+                onClick = { onUpdateDiscoveryConfig(presetPort, uiState.discoveryBleMac) },
+                label = { Text(presetPort) },
+              )
+            }
+          }
+        }
+
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Column(modifier = Modifier.weight(1f)) {
+            Text(
+              text = "Глибоке сканування підмережі (${uiState.lanDiagnostics.subnetPrefix ?: "192.168.x"}.1–254)",
+              style = MaterialTheme.typography.bodyMedium,
+              fontWeight = FontWeight.Medium,
+            )
+            Text(
+              text = "Знаходить станцію навіть якщо роутер блокує Broadcast-пакети",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+          }
+          Switch(
+            checked = uiState.deepSubnetScanEnabled,
+            onCheckedChange = onToggleDeepSubnetScan,
           )
         }
+
+        if (uiState.isDiscovering) {
+          LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+          if (uiState.discoveryProgressText != null) {
+            Text(
+              text = uiState.discoveryProgressText,
+              style = MaterialTheme.typography.bodySmall,
+              fontWeight = FontWeight.Medium,
+            )
+          }
+        }
+
         Row(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -103,33 +169,50 @@ fun DevicesNetworkSection(
             enabled = !uiState.isDiscovering,
             modifier = Modifier.weight(1f),
           ) {
-            Text(if (uiState.isDiscovering) "Сканування LAN..." else "Сканувати LAN (Broadcast)")
+            Text(if (uiState.isDiscovering) "Йде пошук..." else "Знайти станції в мережі")
           }
           OutlinedButton(
-            onClick = { showAddForm = !showAddForm },
+            onClick = {
+              editingDeviceId = null
+              formName = ""
+              formIp = uiState.lanDiagnostics.subnetPrefix?.let { "$it.50" } ?: "192.168.1.50"
+              formPort = uiState.discoveryPort.ifBlank { "30000" }
+              showEditForm = !showEditForm
+            },
           ) {
-            Text(if (showAddForm) "Сховати форму" else "+ Додати IP")
+            Text(if (showEditForm && editingDeviceId == null) "Сховати" else "+ Вручну")
           }
         }
+      }
+    }
 
-        if (showAddForm) {
-          HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+    // 2. Add / Edit Station Form Card
+    if (showEditForm) {
+      Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+      ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
           Text(
-            text = "Додати пристрій за статичною IP-адресою",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
+            text = if (editingDeviceId != null) "Редагування збереженої станції" else "Додати станцію за IP-адресою",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+          )
+          Text(
+            text = "IP-адресу станції можна переглянути в офіційному додатку Marstek або у списку підключених пристроїв вашого Wi-Fi роутера.",
+            style = MaterialTheme.typography.bodySmall,
           )
           Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
-              value = manualIp,
-              onValueChange = { manualIp = it },
-              label = { Text("IP-адреса") },
+              value = formIp,
+              onValueChange = { formIp = it },
+              label = { Text("IP-адреса станції") },
               singleLine = true,
               modifier = Modifier.weight(1.4f),
             )
             OutlinedTextField(
-              value = manualPort,
-              onValueChange = { manualPort = it },
+              value = formPort,
+              onValueChange = { formPort = it },
               label = { Text("UDP Порт") },
               singleLine = true,
               keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -138,112 +221,253 @@ fun DevicesNetworkSection(
           }
           Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
-              value = manualName,
-              onValueChange = { manualName = it },
-              label = { Text("Назва (опційно)") },
+              value = formName,
+              onValueChange = { formName = it },
+              label = { Text("Назва (напр. Балкон / Гараж)") },
               singleLine = true,
-              modifier = Modifier.weight(1f),
+              modifier = Modifier.weight(1.3f),
             )
             OutlinedTextField(
-              value = manualFw,
-              onValueChange = { manualFw = it },
-              label = { Text("FW версія (напр. 154)") },
+              value = formFw,
+              onValueChange = { formFw = it },
+              label = { Text("Версія FW") },
               singleLine = true,
               keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-              modifier = Modifier.weight(1f),
+              modifier = Modifier.weight(0.9f),
             )
           }
-          Text("Модель пристрою (Розділ IV):", style = MaterialTheme.typography.labelMedium)
+          Text("Модель зарядної станції:", style = MaterialTheme.typography.labelMedium)
           FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("VenusD", "VenusA", "VenusC", "VenusE", "VenusE mini").forEach { model ->
+            listOf("VenusE", "VenusC", "VenusD", "VenusA", "VenusE mini").forEach { model ->
               FilterChip(
-                selected = manualModel == model,
-                onClick = { manualModel = model },
+                selected = formModel == model,
+                onClick = { formModel = model },
                 label = { Text(model) },
               )
             }
           }
-          Button(
-            onClick = {
-              onAddManualDevice(
-                manualName,
-                manualIp,
-                manualPort.toIntOrNull() ?: MarstekApiConstants.DEFAULT_UDP_PORT,
-                manualModel,
-                manualFw.toIntOrNull(),
-              )
-              showAddForm = false
-            },
+          Row(
             modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
           ) {
-            Text("Зберегти та підключитися")
+            Button(
+              onClick = {
+                onSaveOrUpdateDevice(
+                  editingDeviceId,
+                  formName,
+                  formIp,
+                  formPort.toIntOrNull() ?: MarstekApiConstants.DEFAULT_UDP_PORT,
+                  formModel,
+                  formFw.toIntOrNull(),
+                )
+                showEditForm = false
+                editingDeviceId = null
+              },
+              modifier = Modifier.weight(1f),
+            ) {
+              Text("Зберегти та підключитися")
+            }
+            OutlinedButton(
+              onClick = {
+                showEditForm = false
+                editingDeviceId = null
+              },
+            ) {
+              Text("Скасувати")
+            }
           }
         }
       }
     }
 
-    // Device Selector & Instance ID Card
+    // 3. Saved Local Stations List
     Card(modifier = Modifier.fillMaxWidth()) {
-      Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-          text = "Доступні пристрої (LAN та Симулятори для тестування)",
-          style = MaterialTheme.typography.titleMedium,
-          fontWeight = FontWeight.Bold,
-        )
-        uiState.endpoints.forEach { ep ->
-          val isSelected = ep.id == uiState.selectedEndpoint?.id
-          Card(
-            onClick = { onSelectEndpoint(ep) },
-            colors = CardDefaults.cardColors(
-              containerColor = if (isSelected) {
-                MaterialTheme.colorScheme.primaryContainer
-              } else {
-                MaterialTheme.colorScheme.surface
-              }
-            ),
+      Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Text(
+            text = "Збережені станції (${uiState.savedDevices.size})",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+          )
+          Text(
+            text = "Зберігаються локально",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+
+        if (uiState.savedDevices.isEmpty()) {
+          Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            shape = RoundedCornerShape(10.dp),
             modifier = Modifier.fillMaxWidth(),
           ) {
-            Row(
-              modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-              verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.SpaceBetween,
+            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+              Text(
+                text = "Список збережених станцій порожній",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+              )
+              Text(
+                text = "Натисніть «Знайти станції в мережі» вище або додайте IP-адресу вашої станції вручну — вона автоматично збережеться у додатку.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+              )
+            }
+          }
+        } else {
+          uiState.savedDevices.forEach { ep ->
+            val isSelected = ep.id == uiState.selectedEndpoint?.id
+            SavedStationCard(
+              endpoint = ep,
+              isSelected = isSelected,
+              onSelect = { onSelectEndpoint(ep) },
+              onEdit = {
+                editingDeviceId = ep.id
+                formName = ep.name
+                formIp = ep.ip
+                formPort = ep.port.toString()
+                formModel = ep.deviceModel
+                formFw = (ep.firmwareVersion ?: 154).toString()
+                showEditForm = true
+              },
+              onDelete = { onDeleteSavedDevice(ep.id) },
+            )
+          }
+        }
+      }
+    }
+
+    // 4. Active Station Network Details (Marstek.GetDevice, Wifi.GetStatus, BLE.GetStatus)
+    val activeEp = uiState.selectedEndpoint
+    if (activeEp != null) {
+      Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+          ) {
+            Column(modifier = Modifier.weight(1f)) {
+              Text(
+                text = "Паспорт станції та мережа",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+              )
+              Text(
+                text = "${activeEp.name} (${activeEp.ip}:${activeEp.port})",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+              )
+            }
+            OutlinedButton(
+              onClick = {
+                onQueryDeviceInfo(null)
+                onQueryWifi()
+                onQueryBle()
+              },
             ) {
-              Column(modifier = Modifier.weight(1f)) {
-                Text(
-                  text = ep.name,
-                  style = MaterialTheme.typography.bodyLarge,
-                  fontWeight = FontWeight.Bold,
-                )
-                Text(
-                  text = "${if (ep.isSimulated) "[DEMO СИМУЛЯТОР] " else "[LAN UDP] "}IP: ${ep.ip}:${ep.port} • Модель: ${ep.deviceModel} • FW: ${ep.firmwareVersion ?: "?"}",
-                  style = MaterialTheme.typography.bodySmall,
-                )
-                Text(
-                  text = "Профіль: ${ep.profile.supportedComponentsSummary}",
-                  style = MaterialTheme.typography.labelSmall,
-                  color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-              }
-              if (isSelected) {
-                Text(
-                  text = "АКТИВНИЙ",
-                  style = MaterialTheme.typography.labelMedium,
-                  fontWeight = FontWeight.Bold,
-                  color = MaterialTheme.colorScheme.primary,
-                )
+              Text("Оновити дані")
+            }
+          }
+
+          val info = uiState.deviceInfo
+          KeyValueRow("Модель", info?.device ?: activeEp.deviceModel)
+          KeyValueRow("Версія прошивки (FW)", "${info?.ver ?: activeEp.firmwareVersion ?: "—"}")
+          KeyValueRow("Серійне ім'я (src)", info?.src ?: "—")
+          KeyValueRow("Wi-Fi MAC", info?.wifiMac ?: uiState.wifiStatus?.wifiMac ?: activeEp.wifiMac ?: "—")
+          KeyValueRow("Bluetooth MAC", info?.bleMac ?: uiState.bleStatus?.bleMac ?: activeEp.bleMac ?: "—")
+
+          HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+          Text(
+            text = "Параметри підключення Wi-Fi та Bluetooth",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+          )
+          val wifi = uiState.wifiStatus
+          val ble = uiState.bleStatus
+          KeyValueRow("Мережа Wi-Fi (SSID)", wifi?.ssid ?: info?.wifiName ?: activeEp.wifiName ?: "—")
+          KeyValueRow("Рівень сигналу Wi-Fi", wifi?.rssi?.let { "$it dBm ${rssiQualityLabel(it)}" } ?: "—")
+          KeyValueRow("IP-адреса станції", wifi?.staIp ?: info?.ip ?: activeEp.ip)
+          KeyValueRow("Основний шлюз", wifi?.staGate ?: "—")
+          KeyValueRow("Маска підмережі", wifi?.staMask ?: "—")
+          KeyValueRow("DNS сервер", wifi?.staDns ?: "—")
+          KeyValueRow("Статус Bluetooth", ble?.state ?: "—")
+        }
+      }
+    }
+
+    // 5. Demo Simulator Toggle & Advanced Instance ID Card
+    Card(modifier = Modifier.fillMaxWidth()) {
+      Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Column(modifier = Modifier.weight(1f)) {
+            Text(
+              text = "Режим демо-симулятора",
+              style = MaterialTheme.typography.titleSmall,
+              fontWeight = FontWeight.Bold,
+            )
+            Text(
+              text = "Додає віртуальні станції (Venus D, Venus E, Venus E mini) для ознайомлення з інтерфейсом без фізичної батареї",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+          }
+          Switch(
+            checked = uiState.demoModeEnabled,
+            onCheckedChange = onToggleDemoMode,
+          )
+        }
+
+        if (uiState.demoModeEnabled) {
+          HorizontalDivider()
+          Text("Віртуальні демо-станції:", style = MaterialTheme.typography.labelMedium)
+          uiState.demoDevices.forEach { demoEp ->
+            val isSelected = demoEp.id == uiState.selectedEndpoint?.id
+            Card(
+              onClick = { onSelectEndpoint(demoEp) },
+              colors = CardDefaults.cardColors(
+                containerColor = if (isSelected) {
+                  MaterialTheme.colorScheme.primaryContainer
+                } else {
+                  MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                }
+              ),
+              modifier = Modifier.fillMaxWidth(),
+            ) {
+              Row(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .padding(10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+              ) {
+                Column(modifier = Modifier.weight(1f)) {
+                  Text(demoEp.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                  Text(demoEp.profile.supportedComponentsSummary, style = MaterialTheme.typography.labelSmall)
+                }
+                if (isSelected) {
+                  Text("АКТИВНА", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                }
               }
             }
           }
         }
 
-        Spacer(modifier = Modifier.height(4.dp))
+        HorizontalDivider()
         Row(
           verticalAlignment = Alignment.CenterVertically,
           horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-          Text("ID екземпляра (params.id):", style = MaterialTheme.typography.bodyMedium)
+          Text("Канал пристрою (params.id):", style = MaterialTheme.typography.bodySmall)
           listOf(0, 1, 2).forEach { idVal ->
             FilterChip(
               selected = uiState.instanceId == idVal,
@@ -254,96 +478,86 @@ fun DevicesNetworkSection(
         }
       }
     }
+  }
+}
 
-    // 3.1.1 Marstek.GetDevice Status Card
-    Card(modifier = Modifier.fillMaxWidth()) {
-      Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically,
-        ) {
+@Composable
+private fun SavedStationCard(
+  endpoint: MarstekEndpoint,
+  isSelected: Boolean,
+  onSelect: () -> Unit,
+  onEdit: () -> Unit,
+  onDelete: () -> Unit,
+) {
+  Card(
+    onClick = onSelect,
+    colors = CardDefaults.cardColors(
+      containerColor = if (isSelected) {
+        MaterialTheme.colorScheme.primaryContainer
+      } else {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+      }
+    ),
+    modifier = Modifier.fillMaxWidth(),
+  ) {
+    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        Column(modifier = Modifier.weight(1f)) {
           Text(
-            text = "3.1.1 Marstek.GetDevice",
+            text = endpoint.name,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
           )
-          OutlinedButton(onClick = { onQueryDeviceInfo(null) }) {
-            Text("Опитати")
-          }
+          Text(
+            text = "IP: ${endpoint.ip}:${endpoint.port} • Модель: ${endpoint.deviceModel} (FW ${endpoint.firmwareVersion ?: "?"})",
+            style = MaterialTheme.typography.bodySmall,
+          )
         }
-        val info = uiState.deviceInfo
-        if (info == null) {
-          Text("Натисніть «Опитати», щоб отримати базову інформацію про пристрій.", style = MaterialTheme.typography.bodySmall)
-        } else {
-          KeyValueRow("Джерело (src)", info.src ?: "—")
-          KeyValueRow("Модель (device)", info.device)
-          KeyValueRow("Версія прошивки (ver)", "${info.ver ?: "—"} ${if ((info.ver ?: 0) >= 150) "(SYS >= 150 підтримується)" else ""}")
-          KeyValueRow("BLE MAC (ble_mac)", info.bleMac ?: "—")
-          KeyValueRow("WiFi MAC (wifi_mac)", info.wifiMac ?: "—")
-          KeyValueRow("Мережа WiFi (wifi_name)", info.wifiName ?: "—")
-          KeyValueRow("IP-адреса (ip)", info.ip ?: "—")
+        if (isSelected) {
+          Surface(
+            color = MaterialTheme.colorScheme.primary,
+            shape = RoundedCornerShape(12.dp),
+          ) {
+            Text(
+              text = "АКТИВНА",
+              style = MaterialTheme.typography.labelSmall,
+              color = MaterialTheme.colorScheme.onPrimary,
+              fontWeight = FontWeight.Bold,
+              modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            )
+          }
         }
       }
-    }
 
-    // 3.2.1 Wifi.GetStatus Card
-    Card(modifier = Modifier.fillMaxWidth()) {
-      Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically,
-        ) {
-          Text(
-            text = "3.2.1 Wifi.GetStatus",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-          )
-          OutlinedButton(onClick = onQueryWifi) {
-            Text("Опитати WiFi")
+      val lastSeenStr = endpoint.lastSeenMillis?.let {
+        SimpleDateFormat("dd.MM HH:mm:ss", Locale.US).format(Date(it))
+      } ?: "ще не було відповіді"
+      val socStr = endpoint.lastKnownSoc?.let { "Заряд: $it% • " } ?: ""
+      val modeStr = endpoint.lastKnownMode?.let { "Режим: $it • " } ?: ""
+      Text(
+        text = "${socStr}${modeStr}Останній зв'язок: $lastSeenStr",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.End,
+      ) {
+        if (!isSelected) {
+          TextButton(onClick = onSelect) {
+            Text("Підключитися")
           }
         }
-        val wifi = uiState.wifiStatus
-        if (wifi == null) {
-          Text("Немає даних Wifi.GetStatus.", style = MaterialTheme.typography.bodySmall)
-        } else {
-          KeyValueRow("ID екземпляра (id)", "${wifi.id ?: 0}")
-          KeyValueRow("WiFi SSID (ssid)", wifi.ssid ?: "null")
-          KeyValueRow("Рівень сигналу (rssi)", "${wifi.rssi ?: "—"} dBm ${rssiQualityLabel(wifi.rssi)}")
-          KeyValueRow("WiFi MAC (wifi_mac)", wifi.wifiMac ?: "—")
-          KeyValueRow("IP пристрою (sta_ip)", wifi.staIp ?: "null")
-          KeyValueRow("Шлюз (sta_gate)", wifi.staGate ?: "null")
-          KeyValueRow("Маска підмережі (sta_mask)", wifi.staMask ?: "null")
-          KeyValueRow("DNS сервер (sta_dns)", wifi.staDns ?: "null")
+        TextButton(onClick = onEdit) {
+          Text("Змінити")
         }
-      }
-    }
-
-    // 3.3.1 BLE.GetStatus Card
-    Card(modifier = Modifier.fillMaxWidth()) {
-      Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically,
-        ) {
-          Text(
-            text = "3.3.1 BLE.GetStatus (Bluetooth)",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-          )
-          OutlinedButton(onClick = onQueryBle) {
-            Text("Опитати BLE")
-          }
-        }
-        val ble = uiState.bleStatus
-        if (ble == null) {
-          Text("Немає даних BLE.GetStatus.", style = MaterialTheme.typography.bodySmall)
-        } else {
-          KeyValueRow("ID екземпляра (id)", "${ble.id ?: 0}")
-          KeyValueRow("Стан Bluetooth (state)", ble.state)
-          KeyValueRow("Bluetooth MAC (ble_mac)", ble.bleMac ?: "—")
+        TextButton(onClick = onDelete) {
+          Text("Видалити", color = MaterialTheme.colorScheme.error)
         }
       }
     }
@@ -369,7 +583,7 @@ fun KeyValueRow(
   Row(
     modifier = modifier
       .fillMaxWidth()
-      .padding(vertical = 2.dp),
+      .padding(vertical = 3.dp),
     horizontalArrangement = Arrangement.SpaceBetween,
     verticalAlignment = Alignment.CenterVertically,
   ) {
