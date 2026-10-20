@@ -19,11 +19,16 @@ android {
         versionName = "1.1"
     }
 
+    val resolvedKeystoreFile = listOfNotNull(
+        System.getenv("KEYSTORE_PATH")?.takeIf { it.isNotBlank() }?.let { file(it) },
+        rootProject.file("release.keystore"),
+        file("${System.getProperty("user.home")}/.android/marsopenclient-release.keystore"),
+    ).firstOrNull { it.exists() }
+
     signingConfigs {
         create("release") {
-            val keystoreFile = rootProject.file("release.keystore")
-            if (keystoreFile.exists()) {
-                storeFile = keystoreFile
+            if (resolvedKeystoreFile != null) {
+                storeFile = resolvedKeystoreFile
                 storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "marsopenclient"
                 keyAlias = System.getenv("KEY_ALIAS") ?: "marsopenclient"
                 keyPassword = System.getenv("KEY_PASSWORD") ?: "marsopenclient"
@@ -35,8 +40,7 @@ android {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            val keystoreFile = rootProject.file("release.keystore")
-            if (keystoreFile.exists()) {
+            if (resolvedKeystoreFile != null) {
                 signingConfig = signingConfigs.getByName("release")
             }
         }
